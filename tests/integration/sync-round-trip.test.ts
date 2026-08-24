@@ -305,17 +305,61 @@ describe('read caching', () => {
     expect(readsAfter).toBeGreaterThan(readsBefore);
   });
 
-  it('invalidates the cache after a write', async () => {
-    const { workspace } = createHarness(seedSingleFile, { cacheTtlMs: 60_000 });
+  it('serves the just-written state without another round trip', async () => {
+    // Re-downloading here would cost 200 KB to read back something we already
+    // hold — and could pick up another device's later change and report it as
+    // the outcome of *this* edit.
+    const { store, workspace } = createHarness(seedSingleFile, { cacheTtlMs: 60_000 });
     await workspace.read();
 
-    const { result } = await workspace.mutate('add_task', (state, ctx) =>
+    const { result, commit } = await workspace.mutate('add_task', (state, ctx) =>
       addTask(state, { title: 'Fresh' }, ctx),
     );
 
+    const readsBefore = store.calls.filter((call) => call.method === 'read').length;
     const view = await workspace.read();
-    expect(view.fromCache).toBe(false);
+    const readsAfter = store.calls.filter((call) => call.method === 'read').length;
+
+    expect(readsAfter).toBe(readsBefore);
     expect(view.state.task.entities[result.task.id]?.title).toBe('Fresh');
+    // The cached snapshot must carry the revision a later conditional write
+    // has to match, or the next mutation would be checked against a stale one.
+    expect(view.snapshot.syncVersion).toBe(commit.syncVersion);
+    expect(view.snapshot.revisions.commitPoint).toBe(commit.rev);
+    expect(view.snapshot.vectorClock['M_TESTCLIENT']).toBe(1);
+  });
+
+  it('drops the cache when a write loses the race, so nothing stale survives', async () => {
+    const { store, workspace } = createHarness(seedSingleFile, {
+      cacheTtlMs: 60_000,
+      maxWriteAttempts: 1,
+    });
+    await workspace.read();
+
+    store.beforeWrite = async (path) => {
+      if (path !== SYNC_FILE_NAMES.single) {
+        return;
+      }
+      const current = await readEnvelope<SingleFileSyncEnvelope>(
+        store,
+        SYNC_FILE_NAMES.single,
+      );
+      store.seed(
+        SYNC_FILE_NAMES.single,
+        await encodeSyncFile(
+          { ...current, syncVersion: current.syncVersion + 1 },
+          { modelVersion: 2, compress: false },
+        ),
+      );
+    };
+
+    await expect(
+      workspace.mutate('add_task', (state, ctx) =>
+        addTask(state, { title: 'Lost' }, ctx),
+      ),
+    ).rejects.toThrow(ConcurrencyError);
+
+    expect((await workspace.read()).fromCache).toBe(false);
   });
 
   it('expires the cache once its TTL passes', async () => {

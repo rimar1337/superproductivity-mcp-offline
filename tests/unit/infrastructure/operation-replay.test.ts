@@ -168,6 +168,32 @@ describe('applying operations', () => {
     expect(result.unhandledActionCodes).toEqual([]);
   });
 
+  it('leaves the virtual Today tag alone when tags change', () => {
+    // Sweeping every tag would strip the task from TODAY's ordering list, and
+    // TODAY's membership comes from the due date — the task would quietly
+    // vanish from the user's Today view over an unrelated tag edit.
+    const base = makeState({
+      tasks: [makeTask({ id: 't1', tagIds: ['a'], dueDay: FIXED_TODAY })],
+      tags: [
+        makeTag({ id: 'TODAY', title: 'Today', taskIds: ['t1'] }),
+        makeTag({ id: 'a', title: 'A', taskIds: ['t1'] }),
+        makeTag({ id: 'b', title: 'B' }),
+      ],
+    });
+    const result = replayOperations(
+      base,
+      [
+        op({
+          a: 'HU',
+          d: 't1',
+          p: payload({ task: { id: 't1', changes: { tagIds: ['b'] } } }),
+        }),
+      ],
+      FIXED_TODAY,
+    );
+    expect(result.state.tag.entities['TODAY']?.taskIds).toEqual(['t1']);
+  });
+
   it('moves a task between tag ordering lists on a tag change', () => {
     const base = makeState({
       tasks: [makeTask({ id: 't1', tagIds: ['a'] })],

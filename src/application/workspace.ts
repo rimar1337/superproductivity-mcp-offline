@@ -161,7 +161,7 @@ export class Workspace {
           nextState: outcome.state,
           operations: outcome.operations,
         });
-        this.invalidate();
+        this.#adoptCommittedState(view, outcome.state, commit);
         this.#logger.debug('Committed mutation', {
           operationName,
           attempt,
@@ -191,6 +191,52 @@ export class Workspace {
         'Try again in a moment.',
       { cause: lastConflict },
     );
+  }
+
+  /**
+   * Makes the just-committed state the cached view.
+   *
+   * Two reasons, and the second is the important one.
+   *
+   * It saves a round trip: a caller that reports what it wrote would otherwise
+   * re-download 200 KB to read back something we already hold.
+   *
+   * And it keeps the answer *true to this write*. Re-reading could pick up a
+   * change another device made in the intervening milliseconds, and reporting
+   * that as the outcome of this edit would be a quiet lie — the user asked what
+   * their edit did, not what the file happens to contain now.
+   *
+   * The snapshot is rebuilt from what the commit actually returned rather than
+   * guessed at, so the cached revision is the one a subsequent conditional
+   * write must match.
+   */
+  #adoptCommittedState(
+    base: WorkspaceView,
+    committedState: AppState,
+    commit: CommitResult,
+  ): void {
+    if (this.#cacheTtlMs <= 0) {
+      this.#cache = null;
+      return;
+    }
+
+    this.#cache = {
+      view: {
+        state: committedState,
+        snapshot: {
+          ...base.snapshot,
+          state: committedState,
+          syncVersion: commit.syncVersion,
+          vectorClock: commit.vectorClock,
+          clientId: commit.clientId,
+          lastModified: commit.lastModified,
+          revisions: { ...base.snapshot.revisions, commitPoint: commit.rev },
+        },
+        diagnostics: base.diagnostics,
+        fromCache: false,
+      },
+      expiresAt: this.#clock.now() + this.#cacheTtlMs,
+    };
   }
 
   /**

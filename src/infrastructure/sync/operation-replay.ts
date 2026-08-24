@@ -7,6 +7,7 @@ import {
   addTaskToTags,
   addTaskToTodayOrder,
   getProject,
+  getTag as getTagOrUndefined,
   getTask,
   removeTaskFromPlannerDays,
   removeTaskFromTodayOrder,
@@ -267,7 +268,11 @@ const applyTaskUpdate = (
 
   if (Object.prototype.hasOwnProperty.call(changes, 'tagIds')) {
     const nextTagIds = withoutTodayTag(changes.tagIds ?? []);
-    next = removeTasksFromAllTags(next, [id]);
+    // Rebuild membership from the *real* tags only. Sweeping every tag would
+    // also strip the task from TODAY's ordering list — and TODAY is virtual,
+    // driven by the due date, so a tag edit must leave it alone. Dropping it
+    // there would quietly remove a task from the user's Today view.
+    next = removeTasksFromRealTags(next, id);
     next = addTaskToTags(next, id, nextTagIds, true);
     next = updateTask(next, id, { tagIds: nextTagIds });
   }
@@ -286,6 +291,24 @@ const applyTaskUpdate = (
   }
 
   return next;
+};
+
+/**
+ * Drops a task id from every concrete tag, leaving the virtual TODAY tag alone.
+ *
+ * TODAY's task list is ordering for a membership derived from due dates, so it
+ * is not a tag the task can be "removed from" by editing `tagIds`.
+ */
+const removeTasksFromRealTags = (state: AppState, taskId: string): AppState => {
+  const realTagIds = state.tag.ids.filter((tagId) => tagId !== TODAY_TAG_ID);
+  const updates = realTagIds
+    .map((tagId) => getTagOrUndefined(state, tagId))
+    .filter((tag): tag is Tag => tag?.taskIds.includes(taskId) === true)
+    .map((tag) => ({
+      id: tag.id,
+      changes: { taskIds: tag.taskIds.filter((id) => id !== taskId) },
+    }));
+  return updates.length > 0 ? updateTags(state, updates) : state;
 };
 
 const applyTaskDelete = (

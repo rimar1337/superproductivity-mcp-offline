@@ -66,6 +66,11 @@ export interface CommitResult {
   readonly syncVersion: number;
   readonly rev: string | null;
   readonly operationCount: number;
+  /** The causal clock now on the remote. */
+  readonly vectorClock: VectorClock;
+  /** The client id recorded as the last writer. */
+  readonly clientId: string;
+  readonly lastModified: number;
 }
 
 /** A read that may be based on a partially-replayed operation log. */
@@ -169,14 +174,18 @@ export class SyncFileGateway {
     const syncVersion = base.syncVersion + 1;
     const recentOps = mergeRecentOps(base.recentOps, input.operations, syncVersion);
 
+    const vectorClock = mergeOperationClocks(base.vectorClock, input.operations);
+    const clientId = currentClientId(input.operations, base.clientId);
+    const lastModified = this.#clock.now();
+
     const envelope: SingleFileSyncEnvelope = {
       ...base.unmodelledEnvelopeFields,
       version: SYNC_FILE_LIMITS.singleFileVersion,
       syncVersion,
       schemaVersion: base.schemaVersion,
-      vectorClock: mergeOperationClocks(base.vectorClock, input.operations),
-      lastModified: this.#clock.now(),
-      clientId: currentClientId(input.operations, base.clientId),
+      vectorClock,
+      lastModified,
+      clientId,
       state: input.nextState,
       ...(base.archiveYoung === undefined ? {} : { archiveYoung: base.archiveYoung }),
       ...(base.archiveOld === undefined ? {} : { archiveOld: base.archiveOld }),
@@ -196,7 +205,14 @@ export class SyncFileGateway {
       preconditionFor(base.revisions.commitPoint),
     );
 
-    return { syncVersion, rev, operationCount: input.operations.length };
+    return {
+      syncVersion,
+      rev,
+      operationCount: input.operations.length,
+      vectorClock,
+      clientId,
+      lastModified,
+    };
   }
 
   // ─── split layout ──────────────────────────────────────────────────────────
@@ -323,14 +339,18 @@ export class SyncFileGateway {
       );
     }
 
+    const vectorClock = mergeOperationClocks(base.vectorClock, input.operations);
+    const clientId = currentClientId(input.operations, base.clientId);
+    const lastModified = this.#clock.now();
+
     const envelope: SplitOpsEnvelope = {
       ...base.unmodelledEnvelopeFields,
       version: SYNC_FILE_LIMITS.splitFileVersion,
       syncVersion,
       schemaVersion: base.schemaVersion,
-      vectorClock: mergeOperationClocks(base.vectorClock, input.operations),
-      lastModified: this.#clock.now(),
-      clientId: currentClientId(input.operations, base.clientId),
+      vectorClock,
+      lastModified,
+      clientId,
       recentOps,
       ...(recentOps[0]?.sv === undefined ? {} : { oldestOpSyncVersion: recentOps[0].sv }),
       snapshotRef: base.snapshotRef,
@@ -345,7 +365,14 @@ export class SyncFileGateway {
       preconditionFor(base.revisions.commitPoint),
     );
 
-    return { syncVersion, rev, operationCount: input.operations.length };
+    return {
+      syncVersion,
+      rev,
+      operationCount: input.operations.length,
+      vectorClock,
+      clientId,
+      lastModified,
+    };
   }
 
   // ─── shared ────────────────────────────────────────────────────────────────
