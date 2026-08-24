@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# Local sync-data snapshots (contain personal task data)
+data/
+!data/.gitkeep
+
+# Test artifacts
+coverage/
+.vitest/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
