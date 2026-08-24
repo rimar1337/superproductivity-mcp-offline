@@ -30,7 +30,7 @@ export type TimeSpentOnDay = Record<string, number>;
  * scheduling through {@link import('../services/task-scheduling.js')} rather
  * than touching these fields directly.
  */
-export interface Task {
+export interface TaskFields {
   id: string;
   title: string;
   isDone: boolean;
@@ -42,19 +42,31 @@ export interface Task {
   timeEstimate: number;
   created: number;
   attachments: unknown[];
-  notes?: string;
-  parentId?: string;
-  modified?: number;
-  doneOn?: number;
-  dueDay?: string | null;
-  dueWithTime?: number | null;
-  hasPlannedTime?: boolean;
-  remindAt?: number | null;
-  reminderId?: string | null;
-  repeatCfgId?: string;
-  deadlineDay?: string | null;
-  deadlineWithTime?: number | null;
-  deadlineRemindAt?: number | null;
+  /**
+   * Every optional field is explicitly `| undefined`.
+   *
+   * Under `exactOptionalPropertyTypes` that is not noise: it is what makes
+   * `{ dueDay: undefined }` mean "clear this field", which is exactly how
+   * Super Productivity's reducers express unscheduling. Without it, clearing a
+   * field and never setting it would be indistinguishable in the type system
+   * while being very different on disk.
+   */
+  notes?: string | undefined;
+  parentId?: string | undefined;
+  modified?: number | undefined;
+  doneOn?: number | undefined;
+  dueDay?: string | null | undefined;
+  dueWithTime?: number | null | undefined;
+  hasPlannedTime?: boolean | undefined;
+  remindAt?: number | null | undefined;
+  reminderId?: string | null | undefined;
+  repeatCfgId?: string | undefined;
+  deadlineDay?: string | null | undefined;
+  deadlineWithTime?: number | null | undefined;
+  deadlineRemindAt?: number | null | undefined;
+}
+
+export interface Task extends TaskFields {
   [unmodelledField: string]: unknown;
 }
 
@@ -119,14 +131,16 @@ export interface PlannerState {
  * simpleCounter, taskRepeatCfg, menuTree, section, plugin data, …) through
  * unchanged.
  */
+export interface TaskSlice extends EntityState<Task> {
+  currentTaskId?: string | null | undefined;
+  selectedTaskId?: string | null | undefined;
+  lastCurrentTaskId?: string | null | undefined;
+  isDataLoaded?: boolean | undefined;
+  [unmodelledField: string]: unknown;
+}
+
 export interface AppState {
-  task: EntityState<Task> & {
-    currentTaskId?: string | null;
-    selectedTaskId?: string | null;
-    lastCurrentTaskId?: string | null;
-    isDataLoaded?: boolean;
-    [unmodelledField: string]: unknown;
-  };
+  task: TaskSlice;
   project: EntityState<Project>;
   tag: EntityState<Tag>;
   note: EntityState<Note> & { todayOrder?: string[] };

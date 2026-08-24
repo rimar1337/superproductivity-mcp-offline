@@ -40,17 +40,24 @@ export const listEntities = <T>(state: EntityState<T>): T[] => {
 /**
  * Adds one entity. Mirrors NgRx `addOne`: an id that already exists is a no-op,
  * which matters during operation replay where the same op can arrive twice.
+ *
+ * Generic over the *slice*, not just the entity, so sibling fields that live
+ * alongside `ids`/`entities` — `currentTaskId`, `selectedTaskId`,
+ * `isDataLoaded`, and anything a future release adds — are carried through
+ * rather than dropped. A helper that returned a bare `{ ids, entities }` would
+ * quietly delete the user's currently-running timer on every task insert.
  */
-export const addOne = <T>(
-  state: EntityState<T>,
+export const addOne = <T, TSlice extends EntityState<T>>(
+  state: TSlice,
   id: string,
   entity: T,
   position: 'top' | 'bottom' = 'bottom',
-): EntityState<T> => {
+): TSlice => {
   if (Object.prototype.hasOwnProperty.call(state.entities, id)) {
     return state;
   }
   return {
+    ...state,
     ids: position === 'bottom' ? [...state.ids, id] : [id, ...state.ids],
     entities: { ...state.entities, [id]: entity },
   };
@@ -64,33 +71,36 @@ export const addOne = <T>(
  * Super Productivity fields, plugin data, issue-integration metadata — survives
  * the round trip untouched.
  */
-export const updateOne = <T extends object>(
-  state: EntityState<T>,
+export const updateOne = <T extends object, TSlice extends EntityState<T>>(
+  state: TSlice,
   id: string,
   changes: Partial<T>,
-): EntityState<T> => {
+): TSlice => {
   const existing = getEntity(state, id);
   if (existing === undefined) {
     return state;
   }
   return {
-    ids: state.ids,
+    ...state,
     entities: { ...state.entities, [id]: { ...existing, ...changes } },
   };
 };
 
 /** Applies {@link updateOne} for each entry, in order. */
-export const updateMany = <T extends object>(
-  state: EntityState<T>,
+export const updateMany = <T extends object, TSlice extends EntityState<T>>(
+  state: TSlice,
   updates: readonly { id: string; changes: Partial<T> }[],
-): EntityState<T> =>
-  updates.reduce((acc, update) => updateOne(acc, update.id, update.changes), state);
+): TSlice =>
+  updates.reduce<TSlice>(
+    (acc, update) => updateOne<T, TSlice>(acc, update.id, update.changes),
+    state,
+  );
 
 /** Removes entities, dropping them from both `ids` and `entities`. */
-export const removeMany = <T>(
-  state: EntityState<T>,
+export const removeMany = <T, TSlice extends EntityState<T>>(
+  state: TSlice,
   ids: readonly string[],
-): EntityState<T> => {
+): TSlice => {
   const toRemove = new Set(ids);
   if (toRemove.size === 0) {
     return state;
@@ -101,7 +111,7 @@ export const removeMany = <T>(
       entities[key] = value;
     }
   }
-  return { ids: state.ids.filter((id) => !toRemove.has(id)), entities };
+  return { ...state, ids: state.ids.filter((id) => !toRemove.has(id)), entities };
 };
 
 /** Removes duplicates while preserving first-seen order. */
