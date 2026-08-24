@@ -47,8 +47,10 @@ const loadE2eConfig = (): { config: AppConfig; sandboxFolder: string } | null =>
 const setup = loadE2eConfig();
 
 describe.skipIf(setup === null)('Nextcloud end-to-end', () => {
-  const config = setup?.config as AppConfig;
-  const sandboxFolder = setup?.sandboxFolder as string;
+  // Inside the block `setup` is non-null by construction: `skipIf` above is the
+  // guard. The fallbacks keep the module type-safe without asserting.
+  const config: AppConfig = setup?.config ?? ({} as AppConfig);
+  const sandboxFolder = setup?.sandboxFolder ?? '';
   const logger = createLogger('error');
 
   /** Points at the user's real folder, read-only, to seed the sandbox from it. */
@@ -291,7 +293,7 @@ describe.skipIf(setup === null)('Nextcloud end-to-end', () => {
     await expect(
       sandboxStore.write(path, 'third', {
         kind: 'match',
-        rev: first.rev as string,
+        rev: first.rev!,
       }),
     ).rejects.toThrow(ConcurrencyError);
 

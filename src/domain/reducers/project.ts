@@ -81,7 +81,7 @@ export const addProject = (
   const menuOp = ctx.operations.create({
     actionCode: 'MP',
     opType: OpType.Update,
-    entityType: 'MENU_TREE' as EntityType,
+    entityType: EntityType.MenuTree,
     entityId: 'projectTree',
     actionPayload: { tree: nextTree },
   });

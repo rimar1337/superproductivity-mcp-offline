@@ -22,19 +22,18 @@ import { FIXTURE_RAW } from '../support/workspace-harness.js';
  * results back. Only the WebDAV transport underneath is substituted.
  */
 
-const baseConfig = (overrides: Partial<AppConfig> = {}): AppConfig =>
-  ({
-    serverUrl: 'https://cloud.example.com',
-    userName: 'tester',
-    password: 'secret',
-    syncFolder: 'super-productivity',
-    mode: 'read-write',
-    clientId: 'M_TESTCLIENT',
-    cacheTtlMs: 0,
-    logLevel: 'silent',
-    requestTimeoutMs: 30_000,
-    ...overrides,
-  }) as AppConfig;
+const baseConfig = (overrides: Partial<AppConfig> = {}): AppConfig => ({
+  serverUrl: 'https://cloud.example.com',
+  userName: 'tester',
+  password: 'secret',
+  syncFolder: 'super-productivity',
+  mode: 'read-write',
+  clientId: 'M_TESTCLIENT',
+  cacheTtlMs: 0,
+  logLevel: 'silent',
+  requestTimeoutMs: 30_000,
+  ...overrides,
+});
 
 interface Fixture {
   readonly client: Client;

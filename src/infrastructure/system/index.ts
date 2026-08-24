@@ -97,16 +97,16 @@ export const createLogger = (
   };
 
   return {
-    error: (message, context) => {
+    error: (message, context): void => {
       emit('error', message, context);
     },
-    warn: (message, context) => {
+    warn: (message, context): void => {
       emit('warn', message, context);
     },
-    info: (message, context) => {
+    info: (message, context): void => {
       emit('info', message, context);
     },
-    debug: (message, context) => {
+    debug: (message, context): void => {
       emit('debug', message, context);
     },
     child: (childBindings) => createLogger(level, { ...bindings, ...childBindings }),

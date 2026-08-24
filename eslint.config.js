@@ -3,7 +3,17 @@ import tseslint from 'typescript-eslint';
 import prettier from 'eslint-config-prettier';
 
 export default tseslint.config(
-  { ignores: ['dist/**', 'coverage/**', 'node_modules/**', 'data/**'] },
+  {
+    ignores: [
+      'dist/**',
+      'coverage/**',
+      'node_modules/**',
+      'data/**',
+      // This file is plain JS and lives outside the TypeScript project, so the
+      // type-aware rules have nothing to resolve it against.
+      'eslint.config.js',
+    ],
+  },
   js.configs.recommended,
   ...tseslint.configs.strictTypeChecked,
   ...tseslint.configs.stylisticTypeChecked,
@@ -30,6 +40,17 @@ export default tseslint.config(
       ],
       'no-console': 'error',
       eqeqeq: ['error', 'always', { null: 'ignore' }],
+      // `const { version: _version, ...rest } = envelope` is how this codebase
+      // separates fields it rewrites from fields it must carry through
+      // untouched. The omitted names are the point, not an oversight.
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          ignoreRestSiblings: true,
+        },
+      ],
     },
   },
   {
@@ -41,6 +62,12 @@ export default tseslint.config(
       '@typescript-eslint/no-unsafe-assignment': 'off',
       '@typescript-eslint/no-unsafe-member-access': 'off',
       '@typescript-eslint/no-unsafe-argument': 'off',
+      // Tests read untyped JSON out of tool results and assert on it; the
+      // stylistic rules below fight that idiom without catching real defects.
+      '@typescript-eslint/no-unnecessary-type-parameters': 'off',
+      '@typescript-eslint/non-nullable-type-assertion-style': 'off',
+      '@typescript-eslint/no-base-to-string': 'off',
+      '@typescript-eslint/require-await': 'off',
       'no-console': 'off',
     },
   },

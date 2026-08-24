@@ -15,9 +15,7 @@
  * @see https://github.com/johannesjo/super-productivity/blob/master/docs/sync-and-op-log/vector-clocks.md
  */
 
-export interface VectorClock {
-  [clientId: string]: number;
-}
+export type VectorClock = Record<string, number>;
 
 export const VectorClockComparison = {
   EQUAL: 'EQUAL',

@@ -603,15 +603,15 @@ describe('updates against real fixture data', () => {
     expect(target).toBeDefined();
 
     await workspace.mutate('complete_task', (state, ctx) =>
-      updateTask(state, target as string, { isDone: true }, ctx),
+      updateTask(state, target!, { isDone: true }, ctx),
     );
 
     const envelope = await readEnvelope<SingleFileSyncEnvelope>(
       store,
       SYNC_FILE_NAMES.single,
     );
-    expect(envelope.state.task.entities[target as string]?.isDone).toBe(true);
-    expect(envelope.state.task.entities[target as string]?.doneOn).toBe(FIXED_NOW);
+    expect(envelope.state.task.entities[target!]?.isDone).toBe(true);
+    expect(envelope.state.task.entities[target!]?.doneOn).toBe(FIXED_NOW);
 
     const op = envelope.recentOps.at(-1);
     expect(op?.a).toBe('HU');

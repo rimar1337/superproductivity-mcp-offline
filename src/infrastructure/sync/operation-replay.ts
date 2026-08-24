@@ -477,7 +477,7 @@ const applyProjectUpdate = (
   if (typeof id !== 'string') {
     return null;
   }
-  return updateProject(state, id, asRecord(update['changes']) as Partial<Project>);
+  return updateProject(state, id, asRecord(update['changes']));
 };
 
 const applyTagAdd = (
@@ -501,9 +501,7 @@ const applyTagUpdate = (
   if (typeof id !== 'string') {
     return null;
   }
-  return updateTags(state, [
-    { id, changes: asRecord(update['changes']) as Partial<Tag> },
-  ]);
+  return updateTags(state, [{ id, changes: asRecord(update['changes']) }]);
 };
 
 const applyTagDelete = (
@@ -521,7 +519,7 @@ const applyTagDelete = (
   // otherwise tasks keep a dangling tag id that no view can resolve.
   const updates = next.task.ids
     .map((taskId) => getTask(next, taskId))
-    .filter((task): task is Task => task !== undefined && task.tagIds.includes(id));
+    .filter((task): task is Task => task?.tagIds.includes(id) === true);
 
   return updates.reduce(
     (acc, task) =>

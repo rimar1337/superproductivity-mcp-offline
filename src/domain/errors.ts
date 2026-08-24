@@ -24,7 +24,7 @@ export abstract class SuperProductivityMcpError extends Error {
   /** Whether re-running the identical request could plausibly succeed. */
   readonly isRetryable: boolean = false;
 
-  protected constructor(message: string, options?: { cause?: unknown }) {
+  constructor(message: string, options?: { cause?: unknown }) {
     super(message, options as ErrorOptions);
     this.name = new.target.name;
     // Restores the prototype chain across the ES5 target downlevelling that
@@ -36,10 +36,6 @@ export abstract class SuperProductivityMcpError extends Error {
 /** Missing or malformed configuration. The operator must intervene. */
 export class ConfigurationError extends SuperProductivityMcpError {
   readonly code = 'CONFIGURATION_ERROR';
-
-  constructor(message: string, options?: { cause?: unknown }) {
-    super(message, options);
-  }
 }
 
 /**
@@ -92,10 +88,6 @@ export class RemoteFileNotFoundError extends RemoteAccessError {
  */
 export class SyncFormatError extends SuperProductivityMcpError {
   readonly code: string = 'SYNC_FORMAT_ERROR';
-
-  constructor(message: string, options?: { cause?: unknown }) {
-    super(message, options);
-  }
 }
 
 /** The sync file is encrypted and we have no key, or the key is wrong. */
@@ -113,10 +105,6 @@ export class DecryptionError extends SyncFormatError {
 export class ConcurrencyError extends SuperProductivityMcpError {
   readonly code = 'CONCURRENCY_ERROR';
   override readonly isRetryable = true;
-
-  constructor(message: string, options?: { cause?: unknown }) {
-    super(message, options);
-  }
 }
 
 /** A referenced entity does not exist in the current state. */

@@ -64,6 +64,13 @@ export const OpType = {
 
 export type OpType = (typeof OpType)[keyof typeof OpType];
 
+/**
+ * Entity types Super Productivity tags operations with.
+ *
+ * The full set rather than only the ones we emit: the replay classifier decides
+ * what it can safely skip by reading this field, so it has to be able to name
+ * every value it might encounter.
+ */
 export const EntityType = {
   Task: 'TASK',
   Project: 'PROJECT',
@@ -71,6 +78,17 @@ export const EntityType = {
   Note: 'NOTE',
   GlobalConfig: 'GLOBAL_CONFIG',
   TimeTracking: 'TIME_TRACKING',
+  Board: 'BOARD',
+  Metric: 'METRIC',
+  SimpleCounter: 'SIMPLE_COUNTER',
+  TaskRepeatCfg: 'TASK_REPEAT_CFG',
+  IssueProvider: 'ISSUE_PROVIDER',
+  MenuTree: 'MENU_TREE',
+  Section: 'SECTION',
+  Planner: 'PLANNER',
+  TaskAttachment: 'TASK_ATTACHMENT',
+  PluginUserData: 'PLUGIN_USER_DATA',
+  PluginMetadata: 'PLUGIN_METADATA',
   All: 'ALL',
 } as const;
 

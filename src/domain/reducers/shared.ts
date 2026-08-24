@@ -197,7 +197,7 @@ export const addTaskToTodayOrder = (state: AppState, taskId: string): AppState =
 /** Removes a task from the Today tag's ordering list. */
 export const removeTaskFromTodayOrder = (state: AppState, taskId: string): AppState => {
   const todayTag = getTag(state, TODAY_TAG_ID);
-  if (todayTag === undefined || !todayTag.taskIds.includes(taskId)) {
+  if (!todayTag?.taskIds.includes(taskId)) {
     return state;
   }
   return updateTags(state, [
@@ -211,7 +211,9 @@ export const removeTaskFromTodayOrder = (state: AppState, taskId: string): AppSt
 /** Sums `timeSpentOnDay`, which is the invariant `task.timeSpent` must hold. */
 export const calcTotalTimeSpent = (timeSpentOnDay: Record<string, number>): number =>
   Object.values(timeSpentOnDay).reduce<number>(
-    (total, ms) => total + (Number(ms) || 0),
+    // `|| 0` rather than a bare sum: real sync files contain NaN and null in
+    // this map, and one of them turns the whole total into NaN.
+    (total, ms) => total + (ms || 0),
     0,
   );
 

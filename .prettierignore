@@ -3,3 +3,7 @@ coverage/
 node_modules/
 data/
 package-lock.json
+
+# The fixture is a verbatim Super Productivity sync file: a `pf_2__` prefix
+# followed by JSON. It is not valid JSON on its own and must stay byte-exact.
+tests/fixtures/

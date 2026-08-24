@@ -130,7 +130,7 @@ export const loadConfig = (env: EnvSource = process.env): AppConfig => {
           .join('\n'),
     );
   }
-  return result.data as AppConfig;
+  return result.data;
 };
 
 /** Maps a schema field back to the variable name the operator actually sets. */

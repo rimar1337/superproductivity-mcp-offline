@@ -66,6 +66,15 @@ export interface TaskFields {
   deadlineRemindAt?: number | null | undefined;
 }
 
+/**
+ * The persisted task: the fields we model, plus everything we do not.
+ *
+ * The interface-with-index-signature shape is deliberate. A
+ * `TaskFields & Record<string, unknown>` intersection would satisfy the lint
+ * rule but loses the declaration-merging and `extends` relationship that
+ * `TaskFields` exists to provide.
+ */
+// eslint-disable-next-line @typescript-eslint/consistent-indexed-object-style
 export interface Task extends TaskFields {
   [unmodelledField: string]: unknown;
 }
@@ -118,10 +127,9 @@ export interface Note {
 }
 
 /** Planner assignments: `YYYY-MM-DD` → ordered task ids planned for that day. */
-export interface PlannerState {
+export type PlannerState = Record<string, unknown> & {
   days: Record<string, string[]>;
-  [unmodelledField: string]: unknown;
-}
+};
 
 /**
  * The `state` object inside the sync file.
