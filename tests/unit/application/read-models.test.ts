@@ -18,8 +18,16 @@ import {
 
 const ctx = { today: FIXED_TODAY, now: FIXED_NOW };
 
-const YESTERDAY = '2026-05-27';
-const TOMORROW = '2026-05-29';
+// Relative to FIXED_TODAY rather than written out, so the suite passes in every
+// timezone: FIXED_TODAY is the *local* day of FIXED_NOW, which shifts by one
+// depending on the machine's offset from UTC.
+const shiftDay = (offset: number): string => {
+  const [y, m, d] = FIXED_TODAY.split('-').map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d + offset));
+  return date.toISOString().slice(0, 10);
+};
+const YESTERDAY = shiftDay(-1);
+const TOMORROW = shiftDay(1);
 
 describe('formatDuration', () => {
   it.each([
