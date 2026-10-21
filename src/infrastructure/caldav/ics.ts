@@ -95,11 +95,52 @@ const foldLine = (line: string): string[] => {
     while (end < bytes.length && ((bytes[end] ?? 0) & 0xc0) === 0x80) {
       end -= 1;
     }
-    out.push(bytes.subarray(offset, end).toString('utf8'));
+    const chunk = bytes.subarray(offset, end).toString('utf8');
+    out.push(offset === 0 ? chunk : ` ${chunk}`);
     offset = end;
     limit = 74; // the leading space counts toward the octet limit
   }
   return out;
+};
+
+/**
+ * Refuses to emit something the server would reject with an opaque 415.
+ *
+ * Two invariants are load-bearing and easy to break: physical lines stay within
+ * 75 octets, and a line that is not a property (`NAME:value`) must be a folded
+ * continuation — i.e. start with a space. Emitting an unfolded chunk without
+ * that space turns the rest of a long DESCRIPTION into invalid content lines.
+ */
+const assertWellFormed = (ics: string): string => {
+  const physical = ics.split('\r\n');
+  physical.forEach((line, index) => {
+    if (line.trim() === '') {
+      return;
+    }
+    if (line.includes('\r') || line.includes('\n')) {
+      throw new ValidationError(
+        `Refusing to write iCalendar with a raw newline inside physical line ${index + 1}.`,
+      );
+    }
+    const octets = Buffer.byteLength(line, 'utf8');
+    if (octets > 75) {
+      throw new ValidationError(
+        `Refusing to write iCalendar: physical line ${index + 1} is ${octets} octets (max 75).`,
+      );
+    }
+    if (
+      index > 0 &&
+      !line.startsWith(' ') &&
+      !line.startsWith('\t') &&
+      !/[;:]/.test(line)
+    ) {
+      throw new ValidationError(
+        `Refusing to write iCalendar: line ${index + 1} looks like an unfolded ` +
+          'continuation (no property name, no leading space).',
+      );
+    }
+  });
+  return ics;
 };
 
 const dtStartLine = (value: string, allDay: boolean): string =>
@@ -161,7 +202,7 @@ export const buildEventIcs = (
   }
   lines.push('STATUS:CONFIRMED', 'END:VEVENT', 'END:VCALENDAR');
 
-  return lines.flatMap(foldLine).join('\r\n') + '\r\n';
+  return assertWellFormed(lines.flatMap(foldLine).join('\r\n') + '\r\n');
 };
 
 /** Unfolds CRLF- or LF-terminated content lines. */
@@ -246,7 +287,7 @@ const replaceEventProperties = (
   }
 
   out.push(...lines.slice(end));
-  return out.flatMap(foldLine).join('\r\n') + '\r\n';
+  return assertWellFormed(out.flatMap(foldLine).join('\r\n') + '\r\n');
 };
 
 /**

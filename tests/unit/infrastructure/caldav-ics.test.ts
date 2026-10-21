@@ -13,6 +13,23 @@ const META = {
   etag: '"abc"',
 };
 
+/**
+ * RFC 5545 §3.1: every physical line ≤75 octets, and every continuation after
+ * the first must start with a space. SabreDAV rejects a body that violates the
+ * second rule with an opaque HTTP 415, which is what this pins down.
+ */
+const assertFolded = (ics: string): void => {
+  const lines = ics.split('\r\n');
+  expect(lines.at(-1)).toBe('');
+  for (const [index, line] of lines.entries()) {
+    if (line === '') continue;
+    expect(Buffer.byteLength(line, 'utf8')).toBeLessThanOrEqual(75);
+    if (index > 0 && !/[;:]/.test(line)) {
+      expect(line.startsWith(' ')).toBe(true);
+    }
+  }
+};
+
 const RAW = [
   'BEGIN:VCALENDAR',
   'VERSION:2.0',
@@ -67,19 +84,49 @@ describe('buildEventIcs', () => {
   });
 
   it('escapes text values and folds long lines', () => {
+    const long = 'x'.repeat(200);
     const ics = buildEventIcs(
       {
         summary: 'A, B; C\nD',
         start: '2026-08-24T09:30:00Z',
-        description: 'x'.repeat(200),
+        description: long,
       },
       { uid: 'uid-3', now },
     );
 
     expect(ics).toContain('SUMMARY:A\\, B\\; C\\nD');
-    for (const line of ics.split('\r\n')) {
-      expect(Buffer.byteLength(line, 'utf8')).toBeLessThanOrEqual(75);
-    }
+    assertFolded(ics);
+    // The full value survives unfolding and parsing — the property the server
+    // actually validates. A continuation without its leading space fails here.
+    expect(parseEvents(ics, META)[0]?.base.description).toBe(long);
+  });
+
+  it('folds a long title, not just the description', () => {
+    const summary = 'A very long meeting title that comfortably exceeds seventy-five octets';
+    const ics = buildEventIcs({ summary, start: '2026-08-24T09:30:00Z' }, {
+      uid: 'uid-long-title',
+      now,
+    });
+
+    assertFolded(ics);
+    expect(parseEvents(ics, META)[0]?.base.summary).toBe(summary);
+  });
+
+  it('keeps an existing long description intact across an update', () => {
+    // An event written by another client may already carry a long DESCRIPTION.
+    // Update must re-fold it correctly instead of turning it into garbage.
+    const long = 'Keep every one of these words. '.repeat(20).trim();
+    const original = buildEventIcs(
+      { summary: 'Original', start: '2026-08-24T09:30:00Z', description: long },
+      { uid: 'uid-patch-long', now },
+    );
+
+    const patched = patchEventIcs(original, { summary: 'Renamed' }, now);
+
+    assertFolded(patched);
+    const parsed = parseEvents(patched, META)[0]?.base;
+    expect(parsed?.summary).toBe('Renamed');
+    expect(parsed?.description).toBe(long);
   });
 
   it('rejects an end before the start', () => {

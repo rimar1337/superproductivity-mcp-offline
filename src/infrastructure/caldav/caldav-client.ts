@@ -216,6 +216,13 @@ export class CaldavClient {
     if (response.status === 404) {
       throw new RemoteFileNotFoundError(what);
     }
+    if (response.status === 415) {
+      throw new RemoteAccessError(
+        `${what} was rejected as invalid iCalendar (HTTP 415). The calendar server ` +
+          `refused the body before storing it${body === '' ? '' : `: ${body.slice(0, 300)}`}`,
+        { status: response.status },
+      );
+    }
     throw new RemoteAccessError(
       `${what} failed with HTTP ${response.status}${body === '' ? '' : `: ${body.slice(0, 200)}`}`,
       { status: response.status },
