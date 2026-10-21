@@ -160,6 +160,7 @@ export class Workspace {
           base: view.snapshot,
           nextState: outcome.state,
           operations: outcome.operations,
+          readDiagnostics: view.diagnostics,
         });
         this.#adoptCommittedState(view, outcome.state, commit);
         this.#logger.debug('Committed mutation', {

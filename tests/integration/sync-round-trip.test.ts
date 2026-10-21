@@ -13,7 +13,7 @@ import {
   SyncFormatError,
   UnsafeOperationError,
 } from '../../src/domain/errors.js';
-import { encodeSyncFile } from '../../src/infrastructure/codec/sync-file-codec.js';
+import { decodeSyncFile, encodeSyncFile } from '../../src/infrastructure/codec/sync-file-codec.js';
 import {
   createHarness,
   FIXTURE_RAW,
@@ -660,5 +660,38 @@ describe('updates against real fixture data', () => {
     const op = envelope.recentOps.at(-1);
     expect(op?.a).toBe('HU');
     expect(op?.d).toBe(target);
+  });
+});
+
+describe('upload format fidelity', () => {
+  it('writes a compressed remote back compressed', async () => {
+    // Rewriting a pf_C… file as pf_… would not lose data, but it would change
+    // the format the app chose without being asked to.
+    const decoded = await decodeSyncFile<SingleFileSyncEnvelope>(FIXTURE_RAW, { expectEncrypted: false });
+    const compressed = await encodeSyncFile(decoded.data, {
+      modelVersion: 2,
+      compress: true,
+    });
+    const { store, workspace } = createHarness((s) => {
+      s.seed(SYNC_FILE_NAMES.single, compressed);
+    });
+
+    await workspace.mutate('add_task', (state, ctx) =>
+      addTask(state, { title: 'Keeps the format' }, ctx),
+    );
+
+    const written = store.contents(SYNC_FILE_NAMES.single);
+    expect(written?.startsWith('pf_C2__')).toBe(true);
+    const after = await decodeSyncFile<SingleFileSyncEnvelope>(written!, { expectEncrypted: false });
+    expect(after.wasCompressed).toBe(true);
+  });
+
+  it('does not compress an uncompressed remote', async () => {
+    const { store, workspace } = createHarness(seedSingleFile);
+    await workspace.mutate('add_task', (state, ctx) =>
+      addTask(state, { title: 'Stays plain' }, ctx),
+    );
+
+    expect(store.contents(SYNC_FILE_NAMES.single)?.startsWith('pf_2__')).toBe(true);
   });
 });

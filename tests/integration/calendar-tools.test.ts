@@ -220,6 +220,7 @@ describe('calendar tools', () => {
       [
         { status: 207, body: CALENDAR_LIST },
         { status: 201, headers: { etag: '"new"' } },
+        { status: 200, headers: { etag: '"new"' }, body: EVENT_ICS },
       ],
       { writable: true },
     );
@@ -248,6 +249,7 @@ describe('calendar tools', () => {
         { status: 207, body: CALENDAR_LIST },
         { status: 200, headers: { etag: '"etag-1"' }, body: EVENT_ICS },
         { status: 204, headers: { etag: '"etag-2"' } },
+        { status: 200, headers: { etag: '"etag-2"' }, body: EVENT_ICS },
       ],
       { writable: true },
     );
@@ -264,6 +266,46 @@ describe('calendar tools', () => {
     expect(put?.init.body).toContain('SUMMARY:Renamed');
     expect(put?.init.body).toContain('ATTENDEE;CN=Someone');
     expect(put?.init.body).toContain('SEQUENCE:3');
+  });
+
+  it('deletes an event conditionally and verifies it is gone', async () => {
+    fixture = await connect(
+      [
+        { status: 207, body: CALENDAR_LIST },
+        { status: 200, headers: { etag: '"etag-1"' }, body: EVENT_ICS },
+        { status: 204 },
+        { status: 404 },
+      ],
+      { writable: true },
+    );
+
+    const result = await fixture.client.callTool({
+      name: 'calendar_delete_event',
+      arguments: { eventId: 'event@example.com' },
+    });
+    expect(parse<{ deleted: boolean }>(result).deleted).toBe(true);
+
+    const del = fixture.calls.find((call) => call.init.method === 'DELETE');
+    expect((del?.init.headers as Record<string, string>)['if-match']).toBe('"etag-1"');
+  });
+
+  it('refuses to delete an event served without a strong ETag', async () => {
+    fixture = await connect(
+      [
+        { status: 207, body: CALENDAR_LIST },
+        { status: 200, body: EVENT_ICS },
+      ],
+      { writable: true },
+    );
+
+    const result = await fixture.client.callTool({
+      name: 'calendar_delete_event',
+      arguments: { eventId: 'event@example.com' },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toMatch(/strong ETag/);
+    expect(fixture.calls.some((call) => call.init.method === 'DELETE')).toBe(false);
   });
 
   it('refuses a write in read-only mode at the service boundary', async () => {

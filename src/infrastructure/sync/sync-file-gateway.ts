@@ -18,6 +18,7 @@ import {
 } from '../../domain/sync/sync-file.js';
 import { mergeVectorClocks, type VectorClock } from '../../domain/sync/vector-clock.js';
 import { decodeSyncFile, encodeSyncFile } from '../codec/sync-file-codec.js';
+import type { DecodedSyncFile } from '../codec/sync-file-codec.js';
 import { replayOperations } from './operation-replay.js';
 
 /**
@@ -60,6 +61,13 @@ export interface CommitInput {
   readonly base: SyncSnapshot;
   readonly nextState: AppState;
   readonly operations: readonly CompactOperation[];
+  /**
+   * What the read that produced `base` could and could not replay. The split
+   * layout refuses to append when this is non-empty: appending onto a
+   * partially-understood baseline would publish operations derived from a
+   * state the server is not sure it reconstructed correctly.
+   */
+  readonly readDiagnostics?: ReadDiagnostics;
 }
 
 export interface CommitResult {
@@ -121,10 +129,11 @@ export class SyncFileGateway {
 
   async #readSingle(): Promise<SyncRead> {
     const file = await this.#store.read(SYNC_FILE_NAMES.single);
-    const decoded = await this.#decode<SingleFileSyncEnvelope>(
+    const file_ = await this.#decode<SingleFileSyncEnvelope>(
       file.content,
       SYNC_FILE_NAMES.single,
     );
+    const decoded = file_.data;
 
     this.#assertNotTombstone(decoded);
     if (decoded.version !== SYNC_FILE_LIMITS.singleFileVersion) {
@@ -164,6 +173,7 @@ export class SyncFileGateway {
         snapshotRef: undefined,
         unmodelledEnvelopeFields: unmodelled,
         revisions: { commitPoint: file.rev },
+        wasCompressed: file_.wasCompressed,
       },
       diagnostics: NO_REPLAY,
     };
@@ -198,7 +208,11 @@ export class SyncFileGateway {
       SYNC_FILE_NAMES.singleBackup,
     );
 
-    const body = await this.#encode(envelope, SYNC_FILE_LIMITS.singleFileVersion);
+    const body = await this.#encode(
+      envelope,
+      SYNC_FILE_LIMITS.singleFileVersion,
+      base.wasCompressed,
+    );
     const { rev } = await this.#store.write(
       SYNC_FILE_NAMES.single,
       body,
@@ -218,10 +232,11 @@ export class SyncFileGateway {
   // ─── split layout ──────────────────────────────────────────────────────────
 
   async #readSplit(opsFile: { content: string; rev: string | null }): Promise<SyncRead> {
-    const ops = await this.#decode<SplitOpsEnvelope>(
+    const opsFileDecoded = await this.#decode<SplitOpsEnvelope>(
       opsFile.content,
       SYNC_FILE_NAMES.ops,
     );
+    const ops = opsFileDecoded.data;
 
     if (ops.migration?.status === 'pending') {
       throw new UnsafeOperationError(
@@ -235,10 +250,11 @@ export class SyncFileGateway {
     // pointer is the only name guaranteed to still hold the right snapshot.
     const stateFileName = ops.snapshotRef?.file ?? SYNC_FILE_NAMES.state;
     const stateFile = await this.#store.read(stateFileName);
-    const stateEnvelope = await this.#decode<SplitStateEnvelope>(
+    const stateFileDecoded = await this.#decode<SplitStateEnvelope>(
       stateFile.content,
       stateFileName,
     );
+    const stateEnvelope = stateFileDecoded.data;
 
     if (stateEnvelope.version !== SYNC_FILE_LIMITS.splitFileVersion) {
       throw new SyncFormatError(
@@ -297,6 +313,7 @@ export class SyncFileGateway {
           state: stateFile.rev,
           stateFileName,
         },
+        wasCompressed: opsFileDecoded.wasCompressed,
       },
       diagnostics: {
         replayedOperations: replay.appliedCount,
@@ -320,6 +337,14 @@ export class SyncFileGateway {
    */
   async #commitSplit(input: CommitInput): Promise<CommitResult> {
     const { base } = input;
+    if (input.readDiagnostics !== undefined && input.readDiagnostics.unhandledActionCodes.length > 0) {
+      throw new UnsafeOperationError(
+        'Some operations in the remote log could not be replayed, so the state this ' +
+          'change was computed against may be incomplete.',
+        'Open Super Productivity and let it sync (it will compact the log), then try ' +
+          'again. The safe alternative is to edit this item in the app.',
+      );
+    }
     if (base.snapshotRef === undefined) {
       throw new SyncFormatError(
         `${SYNC_FILE_NAMES.ops} has no snapshot reference; the folder is not in a ` +
@@ -358,7 +383,11 @@ export class SyncFileGateway {
 
     await this.#backupBeforeOverwrite(SYNC_FILE_NAMES.ops, SYNC_FILE_NAMES.opsBackup);
 
-    const body = await this.#encode(envelope, SYNC_FILE_LIMITS.splitFileVersion);
+    const body = await this.#encode(
+      envelope,
+      SYNC_FILE_LIMITS.splitFileVersion,
+      base.wasCompressed,
+    );
     const { rev } = await this.#store.write(
       SYNC_FILE_NAMES.ops,
       body,
@@ -408,13 +437,12 @@ export class SyncFileGateway {
     }
   }
 
-  async #decode<T>(raw: string, path: string): Promise<T> {
+  async #decode<T>(raw: string, path: string): Promise<DecodedSyncFile<T>> {
     try {
-      const decoded = await decodeSyncFile<T>(raw, {
+      return await decodeSyncFile<T>(raw, {
         encryptionPassword: this.#encryptionPassword,
         expectEncrypted: this.#encryptionPassword !== undefined,
       });
-      return decoded.data;
     } catch (error) {
       if (error instanceof SyncFormatError) {
         throw new SyncFormatError(`${path}: ${error.message}`, { cause: error });
@@ -423,10 +451,14 @@ export class SyncFileGateway {
     }
   }
 
-  async #encode(envelope: unknown, modelVersion: number): Promise<string> {
+  async #encode(
+    envelope: unknown,
+    modelVersion: number,
+    compress: boolean = this.#compressUploads,
+  ): Promise<string> {
     return encodeSyncFile(envelope, {
       modelVersion,
-      compress: this.#compressUploads,
+      compress,
       encryptionPassword: this.#encryptionPassword,
     });
   }

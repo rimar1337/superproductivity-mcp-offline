@@ -64,10 +64,36 @@ Concretely, every write:
 3. **Emits the matching operation** with this server's client id and an
    incremented vector clock, so your other devices accept it as causally newer
    rather than flagging it as a conflict.
-4. **Refreshes the `.bak`** before touching the primary file.
+4. **Refreshes the `.bak`** before touching the primary file. It also keeps the
+   format you chose: a compressed remote is written back compressed, so the
+   first write does not silently change the file's encoding.
 5. **Writes conditionally, on the revision it read.** Never unconditionally.
    If another device wrote first, the whole mutation re-runs against the fresh
    state — their change survives, yours applies on top.
+6. **Refuses rather than guesses.** If the split operation log contains actions
+   this server cannot replay, or has filled up, the write is rejected with an
+   explanation instead of being appended to a baseline it cannot vouch for.
+
+### Format contract
+
+This server is verified against Super Productivity's **file-based sync format**:
+single-file `sync-data.json` **version 2**, and split `sync-ops.json` /
+`sync-state.json` **version 3** (`FILE_VERSION: 2`, `SPLIT_FILE_VERSION: 3`).
+Those numbers are read from the file and checked on every read; an unknown
+version is refused, never written.
+
+Upstream has a second, newer transport (`super-sync-server`, operation files
+with `content-rev`). This server speaks the file-based format that Nextcloud
+sync folders use. If a future Super Productivity release changes
+`FILE_VERSION` or the split envelope shape, the version check will fail loudly
+rather than write a file your app cannot read — upgrade or roll back the server
+before syncing again.
+
+A golden round-trip test (`tests/integration/golden-preservation.test.ts`)
+asserts that one edit changes *only* the fields it names: unknown envelope
+fields, unknown task fields, archives, and every untouched entity survive
+byte-for-byte. Set `SP_GOLDEN_SYNC_FILE=/path/to/sync-data.json` to run that
+same proof against a real file without copying it into the repository.
 
 > Verified against a live Nextcloud: `If-Match` is genuinely enforced, and after
 > a full create/schedule/complete/delete cycle the remote is still a valid

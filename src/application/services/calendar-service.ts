@@ -246,6 +246,7 @@ export class CalendarService {
     const ics = buildEventIcs(input, { uid, now });
 
     const written = await this.#client.putEvent(href, ics, null);
+    await this.#verifyWritten(written.href, written.etag);
     this.#logger.info('Created calendar event', { uid, calendar: calendar.displayName });
 
     return this.#eventFromIcs(ics, {
@@ -271,6 +272,7 @@ export class CalendarService {
       patched,
       located.resource.etag,
     );
+    await this.#verifyWritten(written.href, written.etag);
     this.#logger.info('Updated calendar event', {
       uid: ref.eventId,
       calendar: located.calendar.displayName,
@@ -288,12 +290,59 @@ export class CalendarService {
       throw new CalendarReadOnlyError('calendar delete');
     }
     const located = await this.#locate(ref);
+    // Same gate as update: without a strong ETag the DELETE cannot prove it is
+    // removing the version we read, so it could erase a concurrent edit.
+    if (located.resource.etag === null) {
+      throw new UnsafeOperationError(
+        `Event "${ref.eventId}" was served without a strong ETag, so a delete could remove a concurrent edit.`,
+        'Re-read the event and try again, or delete it in the calendar app.',
+      );
+    }
     await this.#client.deleteEvent(located.resource.href, located.resource.etag);
+    await this.#verifyDeleted(located.resource.href);
     this.#logger.info('Deleted calendar event', {
       uid: ref.eventId,
       calendar: located.calendar.displayName,
     });
     return { deleted: true, uid: ref.eventId };
+  }
+
+  /**
+   * Confirms a write actually landed, the way Super Productivity's file-based
+   * `_verifyUpload` re-GETs after upload. Best-effort: a mismatch is logged,
+   * not thrown, because the write already happened and the caller needs the
+   * result either way. A silent server-side drop is what this is here to catch.
+   */
+  async #verifyWritten(href: string, expectedEtag: string | null): Promise<void> {
+    try {
+      const stored = await this.#client.getEventResource(href);
+      if (expectedEtag !== null && stored.etag !== null && stored.etag !== expectedEtag) {
+        this.#logger.warn('Stored event ETag differs from the one returned by the write', {
+          href,
+          expectedEtag,
+          storedEtag: stored.etag,
+        });
+      }
+    } catch (error) {
+      this.#logger.warn('Could not re-read the event to verify the write', {
+        href,
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  async #verifyDeleted(href: string): Promise<void> {
+    try {
+      await this.#client.getEventResource(href);
+      this.#logger.warn('Event still exists after a successful delete response', { href });
+    } catch (error) {
+      if (!(error instanceof RemoteFileNotFoundError)) {
+        this.#logger.warn('Could not re-read the event to verify the delete', {
+          href,
+          reason: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
   }
 
   /**

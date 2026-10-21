@@ -136,6 +136,11 @@ export interface SyncSnapshot {
   readonly archiveOld: unknown;
   /** Present only for the split layout. */
   readonly snapshotRef: SnapshotRef | undefined;
+  /**
+   * Whether the file we read was compressed (`pf_C…`). Carried forward so a
+   * write re-encodes in the same form instead of silently changing the format.
+   */
+  readonly wasCompressed: boolean;
   /** Fields of the envelope this version does not model, preserved verbatim. */
   readonly unmodelledEnvelopeFields: Readonly<Record<string, unknown>>;
   readonly revisions: SyncRevisions;
