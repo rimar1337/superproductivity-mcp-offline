@@ -26,6 +26,16 @@ export const SyncMode = {
 
 export type SyncMode = (typeof SyncMode)[keyof typeof SyncMode];
 
+export const Transport = {
+  Stdio: 'stdio',
+  Http: 'http',
+} as const;
+
+export type Transport = (typeof Transport)[keyof typeof Transport];
+
+/** Global default for how the process exposes itself over HTTP. */
+const DEFAULT_PORT = 8787;
+
 const trimmedString = z.string().trim().min(1);
 
 const configSchema = z.object({
@@ -49,6 +59,30 @@ const configSchema = z.object({
   cacheTtlMs: z.number().int().min(0).max(600_000),
   logLevel: z.enum(['silent', 'error', 'warn', 'info', 'debug']),
   requestTimeoutMs: z.number().int().min(1_000).max(300_000),
+  transport: z.enum([Transport.Stdio, Transport.Http]),
+  host: z.string().min(1),
+  port: z.number().int().min(1).max(65_535),
+  /**
+   * Bearer token protecting every HTTP request. Immutable once set: if it is
+   * present it must be used, and if it is absent the server refuses to start
+   * over HTTP — an unauthenticated MCP endpoint is an unauthenticated write
+   * endpoint, and there is no valid reason to expose one.
+   */
+  authToken: z.string().min(1).optional(),
+  /** CalDAV calendar server, e.g. the Nextcloud DAV root. Optional. */
+  caldavUrl: z.string().url().optional(),
+  caldavUsername: z.string().min(1).optional(),
+  caldavPassword: z.string().min(1).optional(),
+  /**
+   * Calendar hrefs to expose for reading. May be absolute
+   * (`/remote.php/dav/calendars/alice/personal/`) or bare display names when a
+   * single home exists. Optional: when unset the server derives calendars from
+   * the user's Super Productivity CalDAV issue-provider config.
+   */
+  calendarIds: z.array(z.string().min(1)).optional(),
+  /** The one calendar writes land in. Mutually exclusive with nothing. */
+  calendarWriteId: z.string().min(1).optional(),
+  calendarMode: z.enum([SyncMode.ReadOnly, SyncMode.ReadWrite]),
 });
 
 export type AppConfig = z.infer<typeof configSchema> & { readonly logLevel: LogLevel };
@@ -71,6 +105,16 @@ const ENV_ALIASES = {
   cacheTtlSeconds: ['SP_CACHE_TTL_SECONDS'],
   logLevel: ['SP_LOG_LEVEL'],
   requestTimeoutMs: ['SP_REQUEST_TIMEOUT_MS'],
+  transport: ['MCP_TRANSPORT', 'SP_TRANSPORT'],
+  host: ['MCP_HOST', 'SP_HOST'],
+  port: ['MCP_PORT', 'SP_PORT'],
+  authToken: ['MCP_AUTH_TOKEN', 'SP_AUTH_TOKEN'],
+  caldavUrl: ['CALDAV_URL', 'SP_CALDAV_URL'],
+  caldavUsername: ['CALDAV_USER', 'SP_CALDAV_USER'],
+  caldavPassword: ['CALDAV_PASSWORD', 'SP_CALDAV_PASSWORD'],
+  calendarIds: ['CALDAV_CALENDARS', 'SP_CALDAV_CALENDARS'],
+  calendarWriteId: ['CALDAV_WRITE_CALENDAR', 'SP_CALDAV_WRITE_CALENDAR'],
+  calendarMode: ['CALENDAR_MODE', 'SP_CALENDAR_MODE'],
 } as const;
 
 export type EnvSource = Record<string, string | undefined>;
@@ -100,6 +144,29 @@ const parseNumber = (
   return parsed;
 };
 
+/**
+ * Parses a comma-separated list, dropping blanks and duplicates.
+ *
+ * Returns `undefined` rather than an empty array when nothing usable was given:
+ * "the operator wrote `CALDAV_CALENDARS=`" and "the operator did not configure
+ * calendars at all" should take the same discovery path, not one of them
+ * silently exposing zero calendars.
+ */
+const parseCommaList = (raw: string | undefined): string[] | undefined => {
+  if (raw === undefined) {
+    return undefined;
+  }
+  const items = [
+    ...new Set(
+      raw
+        .split(',')
+        .map((item) => item.trim())
+        .filter((item) => item !== ''),
+    ),
+  ];
+  return items.length === 0 ? undefined : items;
+};
+
 export const loadConfig = (env: EnvSource = process.env): AppConfig => {
   const candidate = {
     serverUrl: pick(env, ENV_ALIASES.serverUrl),
@@ -119,6 +186,16 @@ export const loadConfig = (env: EnvSource = process.env): AppConfig => {
       30_000,
       'SP_REQUEST_TIMEOUT_MS',
     ),
+    transport: pick(env, ENV_ALIASES.transport) ?? Transport.Stdio,
+    host: pick(env, ENV_ALIASES.host) ?? '127.0.0.1',
+    port: parseNumber(pick(env, ENV_ALIASES.port), DEFAULT_PORT, 'MCP_PORT'),
+    authToken: pick(env, ENV_ALIASES.authToken),
+    caldavUrl: pick(env, ENV_ALIASES.caldavUrl),
+    caldavUsername: pick(env, ENV_ALIASES.caldavUsername),
+    caldavPassword: pick(env, ENV_ALIASES.caldavPassword),
+    calendarIds: parseCommaList(pick(env, ENV_ALIASES.calendarIds)),
+    calendarWriteId: pick(env, ENV_ALIASES.calendarWriteId),
+    calendarMode: pick(env, ENV_ALIASES.calendarMode) ?? SyncMode.ReadOnly,
   };
 
   const result = configSchema.safeParse(candidate);
@@ -185,4 +262,12 @@ export const describeConfig = (
   isEncryptionConfigured: config.encryptionPassword !== undefined,
   cacheTtlMs: config.cacheTtlMs,
   logLevel: config.logLevel,
+  transport: config.transport,
+  host: config.host,
+  port: config.port,
+  isAuthTokenConfigured: config.authToken !== undefined,
+  calendarMode: config.calendarMode,
+  isCaldavConfigured: config.caldavUrl !== undefined,
+  isCaldavPasswordConfigured: config.caldavPassword !== undefined,
+  calendarIds: config.calendarIds?.join(', ') ?? '',
 });

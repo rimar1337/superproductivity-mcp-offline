@@ -32,6 +32,10 @@ const baseConfig = (overrides: Partial<AppConfig> = {}): AppConfig => ({
   cacheTtlMs: 0,
   logLevel: 'silent',
   requestTimeoutMs: 30_000,
+  transport: 'stdio',
+  host: '127.0.0.1',
+  port: 8787,
+  calendarMode: 'read-only',
   ...overrides,
 });
 

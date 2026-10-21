@@ -22,7 +22,7 @@ const ctx = { today: FIXED_TODAY, now: FIXED_NOW };
 // timezone: FIXED_TODAY is the *local* day of FIXED_NOW, which shifts by one
 // depending on the machine's offset from UTC.
 const shiftDay = (offset: number): string => {
-  const [y, m, d] = FIXED_TODAY.split('-').map(Number);
+  const [y, m, d] = FIXED_TODAY.split('-').map(Number) as [number, number, number];
   const date = new Date(Date.UTC(y, m - 1, d + offset));
   return date.toISOString().slice(0, 10);
 };
