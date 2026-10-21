@@ -342,7 +342,7 @@ server converts at the boundary so nothing is ever off by a factor of sixty.
 | `SP_NEXTCLOUD_LOGIN_NAME` | —                    | Only if your instance logs in by email but stores files under a different username.                                  |
 | `SP_SYNC_FOLDER`          | `super-productivity` | Folder inside your Nextcloud.                                                                                        |
 | `SP_ENCRYPTION_PASSWORD`  | —                    | **Only** if you enabled encryption in Super Productivity's sync settings. Must match exactly.                        |
-| `SP_MODE`                 | `read-write`         | `read-only` hides every write tool.                                                                                  |
+| `SP_MODE`                 | `read-only`          | `read-write` enables task writes; `read-only` hides every write tool.                                                |
 | `SP_CLIENT_ID`            | derived              | This server's identity in the vector clock. Derived stably from machine + target; set it only if you need to pin it. |
 | `SP_CACHE_TTL_SECONDS`    | `20`                 | How long a read may be served from cache. Writes always refetch.                                                     |
 | `SP_LOG_LEVEL`            | `info`               | `silent` \| `error` \| `warn` \| `info` \| `debug`. Always stderr.                                                   |

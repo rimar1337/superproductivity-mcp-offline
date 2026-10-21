@@ -175,7 +175,7 @@ export const loadConfig = (env: EnvSource = process.env): AppConfig => {
     loginName: pick(env, ENV_ALIASES.loginName),
     syncFolder: pick(env, ENV_ALIASES.syncFolder) ?? 'super-productivity',
     encryptionPassword: pick(env, ENV_ALIASES.encryptionPassword),
-    mode: pick(env, ENV_ALIASES.mode) ?? SyncMode.ReadWrite,
+    mode: pick(env, ENV_ALIASES.mode) ?? SyncMode.ReadOnly,
     clientId: pick(env, ENV_ALIASES.clientId) ?? deriveClientId(env),
     cacheTtlMs:
       parseNumber(pick(env, ENV_ALIASES.cacheTtlSeconds), 20, 'SP_CACHE_TTL_SECONDS') *

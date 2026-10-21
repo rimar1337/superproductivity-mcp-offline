@@ -58,7 +58,8 @@ describe('loadConfig', () => {
     expect(config.serverUrl).toBe('https://cloud.example.com');
     expect(config.userName).toBe('alice');
     expect(config.syncFolder).toBe('super-productivity');
-    expect(config.mode).toBe(SyncMode.ReadWrite);
+    // Reads are safe; writes are opt-in.
+    expect(config.mode).toBe(SyncMode.ReadOnly);
   });
 
   it('accepts the legacy lowercase names, so an existing .env keeps working', () => {
@@ -150,8 +151,8 @@ describe('loadConfig', () => {
 
 describe('isWritable', () => {
   it('follows the configured mode', () => {
-    expect(isWritable(loadConfig(validEnv))).toBe(true);
-    expect(isWritable(loadConfig({ ...validEnv, SP_MODE: 'read-only' }))).toBe(false);
+    expect(isWritable(loadConfig(validEnv))).toBe(false);
+    expect(isWritable(loadConfig({ ...validEnv, SP_MODE: 'read-write' }))).toBe(true);
   });
 });
 
