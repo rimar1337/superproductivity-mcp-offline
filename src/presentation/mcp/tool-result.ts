@@ -1,4 +1,5 @@
 import {
+  CalendarReadOnlyError,
   ConcurrencyError,
   ConfigurationError,
   DecryptionError,
@@ -90,6 +91,18 @@ export const toFailure = (error: unknown, logger: Logger): McpToolResult => {
       dataUnchanged: true,
       nextStep:
         'Tell the user this server is read-only. Only they can change SP_MODE and restart it.',
+    });
+  }
+
+  if (error instanceof CalendarReadOnlyError) {
+    return failure({
+      error: error.message,
+      code: error.code,
+      retryable: false,
+      dataUnchanged: true,
+      nextStep:
+        'Tell the user calendar writes are disabled. Only they can change CALENDAR_MODE ' +
+        'and restart the server.',
     });
   }
 

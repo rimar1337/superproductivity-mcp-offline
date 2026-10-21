@@ -169,3 +169,66 @@ describe('describeConfig', () => {
     expect(summary['isEncryptionConfigured']).toBe(true);
   });
 });
+
+describe('transport and calendar settings', () => {
+  it('defaults to stdio on loopback with a read-only calendar', () => {
+    const config = loadConfig(validEnv);
+
+    expect(config.transport).toBe('stdio');
+    expect(config.host).toBe('127.0.0.1');
+    expect(config.port).toBe(8787);
+    expect(config.authToken).toBeUndefined();
+    expect(config.calendarMode).toBe('read-only');
+    expect(config.calendarIds).toBeUndefined();
+  });
+
+  it('accepts HTTP settings and splits calendar ids', () => {
+    const config = loadConfig({
+      ...validEnv,
+      MCP_TRANSPORT: 'http',
+      MCP_HOST: '0.0.0.0',
+      MCP_PORT: '9000',
+      MCP_AUTH_TOKEN: 'a-long-secret',
+      CALDAV_URL: 'https://cloud.example.com',
+      CALDAV_CALENDARS: 'Personal, Work , Personal',
+      CALDAV_WRITE_CALENDAR: 'Personal',
+      CALENDAR_MODE: 'read-write',
+      CALDAV_USER: 'alice',
+      CALDAV_PASSWORD: 'dav-secret',
+    });
+
+    expect(config.transport).toBe('http');
+    expect(config.host).toBe('0.0.0.0');
+    expect(config.port).toBe(9000);
+    expect(config.authToken).toBe('a-long-secret');
+    expect(config.calendarIds).toEqual(['Personal', 'Work']);
+    expect(config.calendarWriteId).toBe('Personal');
+    expect(config.calendarMode).toBe('read-write');
+  });
+
+  it('rejects an unknown transport and a nonsense port', () => {
+    expect(() => loadConfig({ ...validEnv, MCP_TRANSPORT: 'carrier-pigeon' })).toThrow(
+      ConfigurationError,
+    );
+    expect(() => loadConfig({ ...validEnv, MCP_PORT: 'not-a-number' })).toThrow(
+      ConfigurationError,
+    );
+  });
+
+  it('never prints secrets from describeConfig', () => {
+    const config = loadConfig({
+      ...validEnv,
+      MCP_AUTH_TOKEN: 'super-secret-token',
+      CALDAV_URL: 'https://cloud.example.com',
+      CALDAV_PASSWORD: 'super-secret-dav',
+    });
+
+    const described = describeConfig(config);
+    const serialised = JSON.stringify(described);
+
+    expect(serialised).not.toContain('super-secret-token');
+    expect(serialised).not.toContain('super-secret-dav');
+    expect(described['isAuthTokenConfigured']).toBe(true);
+    expect(described['isCaldavPasswordConfigured']).toBe(true);
+  });
+});

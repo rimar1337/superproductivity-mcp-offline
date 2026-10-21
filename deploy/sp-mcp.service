@@ -1,0 +1,27 @@
+# Optional systemd unit, for operators who would rather not run deploy/run.sh.
+#
+#   sudo cp deploy/sp-mcp.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now sp-mcp
+#
+# Adjust User, WorkingDirectory and EnvironmentFile to match the VPS.
+[Unit]
+Description=Super Productivity MCP server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=spmcp
+WorkingDirectory=/opt/sp-mcp-standalone
+EnvironmentFile=/opt/sp-mcp-standalone/.env
+ExecStart=/usr/bin/node dist/main.js
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

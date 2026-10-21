@@ -1,21 +1,24 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { CalendarService } from './application/services/calendar-service.js';
 import { DiagnosticsService } from './application/services/diagnostics-service.js';
 import { OrganiserService } from './application/services/organiser-service.js';
 import { TaskService } from './application/services/task-service.js';
 import { Workspace } from './application/workspace.js';
 import { SYNC_FILE_LIMITS } from './domain/sync/sync-file.js';
 import type { Clock, FileStore, IdGenerator, Logger } from './domain/ports.js';
-import { isWritable, type AppConfig } from './infrastructure/config/config.js';
+import { isWritable, SyncMode, type AppConfig } from './infrastructure/config/config.js';
 import { SyncFileGateway } from './infrastructure/sync/sync-file-gateway.js';
 import {
   createLogger,
   systemClock,
   systemIdGenerator,
 } from './infrastructure/system/index.js';
+import { CaldavClient } from './infrastructure/caldav/caldav-client.js';
 import {
   buildNextcloudBaseUrl,
   WebdavClient,
 } from './infrastructure/webdav/webdav-client.js';
+import { registerCalendarTools } from './presentation/mcp/register-calendar-tools.js';
 import { registerTools } from './presentation/mcp/register-tools.js';
 
 /**
@@ -34,6 +37,8 @@ export interface Container {
   readonly tasks: TaskService;
   readonly organiser: OrganiserService;
   readonly diagnostics: DiagnosticsService;
+  /** Present only when a CalDAV URL is configured. */
+  readonly calendar?: CalendarService;
 }
 
 export interface ContainerOverrides {
@@ -41,6 +46,8 @@ export interface ContainerOverrides {
   readonly clock?: Clock;
   readonly ids?: IdGenerator;
   readonly logger?: Logger;
+  /** Replaces the CalDAV client's service wholesale, for tests. */
+  readonly calendar?: CalendarService;
 }
 
 export const SERVER_NAME = 'superproductivity-mcp';
@@ -98,6 +105,32 @@ export const createContainer = (
       isEncrypted: config.encryptionPassword !== undefined,
       operationLogCapacity: SYNC_FILE_LIMITS.maxRecentOps,
     }),
+    ...(overrides.calendar !== undefined
+      ? { calendar: overrides.calendar }
+      : config.caldavUrl === undefined
+        ? {}
+        : {
+            calendar: new CalendarService({
+              client: new CaldavClient({
+                baseUrl: config.caldavUrl,
+                // Calendars normally share the Nextcloud login, but DAV may be
+                // served by a separate account, so each falls back independently.
+                username: config.caldavUsername ?? config.loginName ?? config.userName,
+                password: config.caldavPassword ?? config.password,
+                logger,
+                timeoutMs: config.requestTimeoutMs,
+              }),
+              logger,
+              writable: config.calendarMode === SyncMode.ReadWrite,
+              ...(config.calendarIds === undefined
+                ? {}
+                : { calendarIds: config.calendarIds }),
+              ...(config.calendarWriteId === undefined
+                ? {}
+                : { writeCalendarId: config.calendarWriteId }),
+              now: () => new Date(clock.now()),
+            }),
+          }),
   };
 };
 
@@ -110,6 +143,7 @@ export const createContainer = (
  * ids come from the listing tools rather than being guessable.
  */
 export const createMcpServer = (container: Container): McpServer => {
+  const calendar = container.calendar;
   const server = new McpServer(
     { name: SERVER_NAME, version: SERVER_VERSION },
     {
@@ -122,6 +156,11 @@ export const createMcpServer = (container: Container): McpServer => {
         'listing tool rather than constructing them.\n\n' +
         '"Today" is not a tag you apply: a task is in Today because its due date is ' +
         'today. Use sp_plan_for_today, or sp_list_tasks with due="today".\n\n' +
+        (calendar === undefined
+          ? ''
+          : 'Calendar tools are prefixed calendar_ and act on the CalDAV calendar, ' +
+            'which is a separate store from the task file. Call ' +
+            'calendar_list_calendars before writing an event.\n\n') +
         'If a write fails, read the "dataUnchanged" and "retryable" fields in the ' +
         'error before deciding what to do — most failures here should not be retried.',
     },
@@ -134,6 +173,18 @@ export const createMcpServer = (container: Container): McpServer => {
     logger: container.logger,
     writable: isWritable(container.config),
   });
+
+  if (calendar !== undefined) {
+    registerCalendarTools(
+      server,
+      {
+        calendar,
+        logger: container.logger,
+        writable: calendar.writable,
+      },
+      () => new Date(),
+    );
+  }
 
   return server;
 };

@@ -1,0 +1,19 @@
+# Caddy terminates TLS and forwards to the loopback-only MCP server.
+#
+#   1. Point the DNS record for sp.example.com at this VPS.
+#   2. Copy this file to /etc/caddy/Caddyfile (or import it).
+#   3. systemctl reload caddy
+#
+# Caddy obtains and renews the certificate automatically. The upstream never
+# sees the public internet, and the bearer token is checked by the server, not
+# by Caddy — so there is exactly one place that decides who may call it.
+
+sp.example.com {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:8787
+
+	# The MCP endpoint is /mcp; /healthz is intentionally unauthenticated.
+	log {
+		output file /var/log/caddy/sp-mcp.log
+	}
+}

@@ -193,6 +193,84 @@ on stdout and logs to stderr only.
 
 ---
 
+## Running on a server (HTTP)
+
+The same binary can listen over the MCP Streamable HTTP transport, which is what
+a remote agent (or an always-on VPS install) needs. Set `MCP_TRANSPORT=http` and
+an `MCP_AUTH_TOKEN` — the server **refuses to start** over HTTP without one.
+
+```bash
+openssl rand -base64 32        # generate a token
+npm run build
+MCP_TRANSPORT=http MCP_AUTH_TOKEN=… node dist/main.js
+```
+
+It listens on `http://127.0.0.1:8787/mcp` by default. `GET /healthz` answers
+`ok` without a token, for liveness probes. Every `/mcp` request must carry:
+
+```
+Authorization: Bearer <MCP_AUTH_TOKEN>
+```
+
+Client configuration is then a URL rather than a command:
+
+```json
+{
+  "mcpServers": {
+    "superproductivity": {
+      "type": "http",
+      "url": "https://sp.example.com/mcp",
+      "headers": { "Authorization": "Bearer <token>" }
+    }
+  }
+}
+```
+
+### Keeping it running
+
+`deploy/run.sh` is a small supervisor: it runs the server and restarts it five
+seconds after a non-zero exit. `deploy/sp-mcp.service` is the equivalent
+systemd unit if you prefer one.
+
+```bash
+npm ci && npm run build
+nohup ./deploy/run.sh >>sp-mcp.log 2>&1 &
+```
+
+### TLS with Caddy
+
+Put Caddy in front so the process stays on loopback and never terminates TLS
+itself. Point the subdomain at the VPS, then use `deploy/Caddyfile.example`:
+
+```
+sp.example.com {
+	reverse_proxy 127.0.0.1:8787
+}
+```
+
+Caddy obtains and renews the certificate automatically. The bearer token is
+checked by the server, so there is exactly one place that decides who may call
+it — no second auth layer to drift out of sync.
+
+### Calendar tools (CalDAV)
+
+Set `CALDAV_URL` to enable the `calendar_*` tools. It accepts the Nextcloud base
+URL, the DAV root, a calendar home, or a single calendar; credentials default to
+the Nextcloud ones already configured. They are read-only until you set
+`CALENDAR_MODE=read-write`, and writes need a target calendar named explicitly:
+
+```bash
+CALDAV_URL=https://cloud.example.com
+CALDAV_CALENDARS=Personal,Work
+CALDAV_WRITE_CALENDAR=Personal
+CALENDAR_MODE=read-only      # or read-write
+```
+
+Calendar credentials should be a Nextcloud **app password** — scoped and
+revocable — not the account password.
+
+---
+
 ## Tools
 
 ### Reading
@@ -225,8 +303,23 @@ on stdout and logs to stderr only.
 | `sp_sync_status`     | Layout, sync version, which devices have been writing, and any warnings. |
 | `sp_recent_activity` | The operation log in plain language — _"did that actually save?"_        |
 
+### Calendar (when `CALDAV_URL` is set)
+
+| Tool                            | Notes                                                                                |
+| ------------------------------- | ------------------------------------------------------------------------------------ |
+| `calendar_list_calendars`       | Calendars this server can see, with the href/name every other tool accepts.          |
+| `calendar_list_events`          | Events in a window, with recurring events expanded into occurrences.                 |
+| `calendar_get_event`            | One event by UID or href.                                                            |
+| `calendar_search_events`        | Case-insensitive search over title, notes and location.                              |
+| `calendar_create_event`         | Write mode only.                                                                     |
+| `calendar_update_event`         | Patches only the fields you pass; recurrence, alarms and attendees are preserved.    |
+| `calendar_delete_event`         | Write mode only. Marked destructive.                                                 |
+| `calendar_time_block_from_task` | Puts a task on the calendar; re-running updates the block instead of duplicating it. |
+
 In `SP_MODE=read-only` the write tools are not advertised at all, rather than
-advertised and refused. A tool a model can see is a tool it will try.
+advertised and refused. A tool a model can see is a tool it will try. Calendar
+writes have their own switch (`CALENDAR_MODE`), so tasks can be writable while
+the calendar stays read-only, or the reverse.
 
 ### Two things worth knowing
 
@@ -255,6 +348,16 @@ server converts at the boundary so nothing is ever off by a factor of sixty.
 | `SP_LOG_LEVEL`            | `info`               | `silent` \| `error` \| `warn` \| `info` \| `debug`. Always stderr.                                                   |
 | `SP_REQUEST_TIMEOUT_MS`   | `30000`              | Per-request timeout.                                                                                                 |
 | `SP_ENV_FILE`             | `./.env`             | Where to read the env file from.                                                                                     |
+| `MCP_TRANSPORT`           | `stdio`              | `stdio` \| `http`.                                                                                                   |
+| `MCP_HOST`                | `127.0.0.1`          | Bind address in HTTP mode.                                                                                           |
+| `MCP_PORT`                | `8787`               | Listen port in HTTP mode.                                                                                            |
+| `MCP_AUTH_TOKEN`          | —                    | **Required** for HTTP. Bearer token every `/mcp` request must present.                                               |
+| `CALDAV_URL`              | —                    | Set to enable calendar tools. Base URL, DAV root, calendar home or one calendar.                                     |
+| `CALDAV_USER`             | Nextcloud user       | Separate DAV account, if any.                                                                                        |
+| `CALDAV_PASSWORD`         | Nextcloud password   | App password recommended.                                                                                            |
+| `CALDAV_CALENDARS`        | all discovered       | Comma-separated hrefs or display names to expose.                                                                    |
+| `CALDAV_WRITE_CALENDAR`   | —                    | Calendar writes target. Required when more than one calendar is exposed.                                             |
+| `CALENDAR_MODE`           | `read-only`          | `read-only` \| `read-write`. Independent of `SP_MODE`.                                                               |
 
 Legacy `nextcloud_user` / `nextcloud_password` names are also accepted, so an
 existing `.env` needs no renaming.

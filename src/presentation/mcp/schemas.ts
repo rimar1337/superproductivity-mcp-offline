@@ -183,3 +183,99 @@ export const minutesToMs = (minutes: number | undefined): number | undefined =>
 /** Parses an ISO timestamp to epoch ms, rejecting anything unparseable. */
 export const isoToEpoch = (iso: string | undefined): number | undefined =>
   iso === undefined ? undefined : new Date(iso).getTime();
+
+// ─── calendar ────────────────────────────────────────────────────────────────
+
+/**
+ * A date or a timestamp. Calendars genuinely need both: an all-day event is a
+ * date, and a meeting is an instant. Accepting only one would force a lossy
+ * conversion in the wrong direction for half the calls.
+ */
+const calendarMoment = z
+  .union([isoDay, isoDateTime])
+  .describe(
+    'Either a date (2026-08-24, all-day) or a timestamp with offset ' +
+      '(2026-08-24T09:30:00-05:00, timed).',
+  );
+
+export const calendarListShape = {};
+
+export const calendarListEventsShape = {
+  from: calendarMoment
+    .optional()
+    .describe('Start of the window. Defaults to the start of today (UTC).'),
+  to: calendarMoment
+    .optional()
+    .describe('End of the window (exclusive). Defaults to 30 days after from.'),
+  calendarId: z
+    .string()
+    .optional()
+    .describe('A calendar href or display name from calendar_list_calendars.'),
+};
+
+export const calendarGetEventShape = {
+  eventId: z
+    .string()
+    .min(1)
+    .describe('The event UID returned by a listing, or its full href.'),
+  calendarId: z
+    .string()
+    .optional()
+    .describe('Narrow the lookup to one calendar. Optional.'),
+};
+
+export const calendarSearchShape = {
+  query: z.string().min(1).describe('Case-insensitive text in title, notes or location.'),
+  from: calendarMoment.optional(),
+  to: calendarMoment.optional(),
+  calendarId: z.string().optional(),
+};
+
+export const calendarCreateEventShape = {
+  summary: z.string().min(1).describe('Event title.'),
+  start: calendarMoment,
+  end: calendarMoment
+    .optional()
+    .describe(
+      'End. Defaults to one hour after start for timed events, same day for all-day.',
+    ),
+  description: z.string().optional(),
+  location: z.string().optional(),
+  allDay: z.boolean().optional().describe('Override detection from the shape of start.'),
+  calendarId: z
+    .string()
+    .optional()
+    .describe('Calendar to write to. Defaults to CALDAV_WRITE_CALENDAR.'),
+  uid: z
+    .string()
+    .optional()
+    .describe('Supply only to make a repeated create idempotent; normally omit.'),
+};
+
+export const calendarUpdateEventShape = {
+  eventId: z.string().min(1).describe('UID or href of the event to change.'),
+  calendarId: z.string().optional(),
+  summary: z.string().min(1).optional(),
+  start: calendarMoment.optional(),
+  end: calendarMoment.optional(),
+  description: z.string().nullable().optional().describe('New notes; null removes them.'),
+  location: z.string().nullable().optional().describe('New location; null removes it.'),
+  allDay: z.boolean().optional(),
+  status: z.enum(['CONFIRMED', 'TENTATIVE', 'CANCELLED']).optional(),
+};
+
+export const calendarDeleteEventShape = {
+  eventId: z.string().min(1).describe('UID or href of the event to delete.'),
+  calendarId: z.string().optional(),
+};
+
+export const calendarTimeBlockShape = {
+  taskId: z
+    .string()
+    .min(1)
+    .describe("Super Productivity task id. The block's UID is derived from it."),
+  summary: z.string().min(1).describe("Usually the task's title."),
+  start: calendarMoment,
+  end: calendarMoment,
+  description: z.string().optional(),
+};

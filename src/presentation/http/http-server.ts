@@ -106,9 +106,7 @@ export interface HttpHandle {
   close: () => Promise<void>;
 }
 
-export const startHttpServer = async (
-  container: Container,
-): Promise<HttpHandle> => {
+export const startHttpServer = async (container: Container): Promise<HttpHandle> => {
   const { authToken, host, port } = container.config;
   const logger = container.logger;
 
@@ -215,8 +213,7 @@ export const startHttpServer = async (
   });
 
   const address = server.address();
-  const boundPort =
-    typeof address === 'object' && address !== null ? address.port : port;
+  const boundPort = typeof address === 'object' && address !== null ? address.port : port;
   logger.info('Listening over HTTP', { host, port: boundPort, path: MCP_PATH });
 
   const close = async (): Promise<void> => {

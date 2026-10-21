@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { AppConfig } from '../../src/infrastructure/config/config.js';
 import { createContainer } from '../../src/composition-root.js';
-import { startHttpServer, type HttpHandle } from '../../src/presentation/http/http-server.js';
+import {
+  startHttpServer,
+  type HttpHandle,
+} from '../../src/presentation/http/http-server.js';
 import { SYNC_FILE_NAMES } from '../../src/domain/sync/sync-file.js';
 import { FakeClock, FakeIdGenerator, silentLogger } from '../support/fakes.js';
 import { InMemoryFileStore } from '../support/in-memory-file-store.js';

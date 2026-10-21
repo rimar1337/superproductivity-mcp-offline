@@ -163,6 +163,18 @@ export class ReadOnlyModeError extends SuperProductivityMcpError {
   }
 }
 
+/** Calendar writes are disabled by configuration (`CALENDAR_MODE=read-only`). */
+export class CalendarReadOnlyError extends SuperProductivityMcpError {
+  readonly code = 'READ_ONLY_MODE';
+
+  constructor(attemptedOperation: string) {
+    super(
+      `Refusing "${attemptedOperation}": calendar writes are disabled. ` +
+        'Set CALENDAR_MODE=read-write to enable calendar modifications.',
+    );
+  }
+}
+
 /**
  * Narrows an unknown thrown value for logging and error mapping.
  *
